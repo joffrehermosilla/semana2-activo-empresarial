@@ -1,12 +1,15 @@
 package nttdata.bootcamp.microservicios.activo.empresarial.controller;
 
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,6 +32,19 @@ public class BusinessAssetController {
 	@Autowired
 	private BusinessAssetService service;
 
+	@Value("${config.balanceador.test}")
+	private String balanceadorTest;
+
+	@GetMapping("/balanceador-test")
+	public ResponseEntity<?> balanceadorTest() {
+
+		Map<String, Object> response = new HashMap<String, Object>();
+		response.put("balanceador", balanceadorTest);
+		response.put("business_asset", service.findAlls());
+		return ResponseEntity.ok(response);
+
+	}
+
 	@GetMapping("/all")
 	public Flux<BusinessAsset> searchAll() {
 		Flux<BusinessAsset> business = service.findAlls();
@@ -45,9 +61,19 @@ public class BusinessAssetController {
 	@PostMapping("/create-business-asset")
 	public Mono<BusinessAsset> createBusinessAsset(@Valid @RequestBody BusinessAsset businessAsset) {
 		LOGGER.info("BUSINESS ASSET create: " + service.saves(businessAsset));
-		return service.saves(businessAsset);
+
+		Mono.just(businessAsset).doOnNext(t -> {
+
+			t.setCreateAt(new Date());
+
+		}).onErrorReturn(businessAsset).onErrorResume(e -> Mono.just(businessAsset))
+				.onErrorMap(f -> new InterruptedException(f.getMessage())).subscribe(x -> LOGGER.info(x.toString()));
+
+		Mono<BusinessAsset> newBusinessAsset = service.saves(businessAsset);
+
+		return newBusinessAsset;
 	}
-	
+
 	@PutMapping("/update-business-asset/{id}")
 	public ResponseEntity<Mono<?>> updateBusinessAsset(@PathVariable String id,
 			@Valid @RequestBody BusinessAsset businessAsset) {
@@ -55,22 +81,22 @@ public class BusinessAssetController {
 			businessAsset.setId(id);
 			t.setCreateAt(new Date());
 		}).onErrorReturn(businessAsset).onErrorResume(e -> Mono.just(businessAsset))
-			.onErrorMap(f -> new InterruptedException(f.getMessage())).subscribe(x -> LOGGER.info(x.toString()));
+				.onErrorMap(f -> new InterruptedException(f.getMessage())).subscribe(x -> LOGGER.info(x.toString()));
 		Mono<BusinessAsset> newbusinessAsset = service.saves(businessAsset);
-		if (newbusinessAsset!= null) {
-		return new ResponseEntity<>(newbusinessAsset, HttpStatus.CREATED);
+		if (newbusinessAsset != null) {
+			return new ResponseEntity<>(newbusinessAsset, HttpStatus.CREATED);
 		}
 		return new ResponseEntity<>(Mono.just(new BusinessAsset()), HttpStatus.I_AM_A_TEAPOT);
 	}
-	
-	@DeleteMapping("/eliminar-Business-Asset/{id}")
+
+	@DeleteMapping("/eliminar-business-asset/{id}")
 	public ResponseEntity<Mono<Void>> deleteBusinessAsset(@PathVariable String id) {
-	BusinessAsset businessAsset = new BusinessAsset();
-	businessAsset.setId(id);
-	Mono<BusinessAsset> newBusinessAsset = service.findById(id);
-	newBusinessAsset.subscribe();
-	Mono<Void> test = service.delete(businessAsset);
-	test.subscribe();
-	return ResponseEntity.noContent().build();
+		BusinessAsset businessAsset = new BusinessAsset();
+		businessAsset.setId(id);
+		Mono<BusinessAsset> newBusinessAsset = service.findById(id);
+		newBusinessAsset.subscribe();
+		Mono<Void> test = service.delete(businessAsset);
+		test.subscribe();
+		return ResponseEntity.noContent().build();
 	}
 }
